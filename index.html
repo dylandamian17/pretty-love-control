@@ -3,15 +3,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Bluetooth Directo - Pretty Love</title>
+    <title>Control BLE Directo - Pretty Love</title>
     <style>
         body { background: #121212; color: #fff; font-family: sans-serif; text-align: center; padding: 20px; }
-        .card { background: #1e1e1e; max-width: 400px; margin: 0 auto; padding: 20px; border-radius: 12px; }
+        .card { background: #1e1e1e; max-width: 400px; margin: 0 auto; padding: 20px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
         button { width: 100%; padding: 16px; margin: 8px 0; font-size: 16px; font-weight: bold; border-radius: 8px; border: none; cursor: pointer; }
         .btn-conn { background: #03dac6; color: #000; }
         .btn-lvl { background: #3700b3; color: #fff; }
         .btn-off { background: #cf6679; color: #000; margin-top: 15px; }
-        #status { margin-top: 15px; font-weight: bold; color: #bb86fc; }
+        #status { margin-top: 15px; font-weight: bold; color: #bb86fc; font-size: 14px; word-break: break-all; }
     </style>
 </head>
 <body>
@@ -33,37 +33,43 @@
 
 <script>
     let bluetoothDevice;
-    let bluetoothServer;
-    let targetCharacteristic;
-
-    // UUIDs genéricos estándar para chips BLE de control de motores / Aogu
-    // (Nota: Si el servicio exacto varía, se puede escanear por nombre o servicios genéricos)
-    const SERVICE_UUID = '0000ffe0-0000-1000-8000-00805f9b34fb';
-    const CHARACTERISTIC_UUID = '0000ffe1-0000-1000-8000-00805f9b34fb';
+    let targetCharacteristic = null;
 
     async function conectarBLE() {
         const status = document.getElementById('status');
         try {
             status.innerText = "Buscando dispositivos...";
             
-            // Solicita vincular por Bluetooth nativo filtrando por nombres comunes de estos chips
+            // acceptAllDevices: true permite mostrar cualquier dispositivo cercano sin filtros rígidos de UUID
             bluetoothDevice = await navigator.bluetooth.requestDevice({
-                filters: [
-                    { namePrefix: 'Aogu' },
-                    { namePrefix: 'Pretty' },
-                    { namePrefix: 'HL' },
-                    { services: [SERVICE_UUID] }
-                ],
-                optionalServices: [SERVICE_UUID]
+                acceptAllDevices: true,
+                optionalServices: ['0000ffe0-0000-1000-8000-00805f9b34fb', '0000fff0-0000-1000-8000-00805f9b34fb', 'e7100001-2503-479fb888-f7b742fa7f16']
             });
 
-            status.innerText = "Conectando al perfil BLE...";
-            bluetoothServer = await bluetoothDevice.gatt.connect();
+            status.innerText = "Conectando al GATT de " + bluetoothDevice.name + "...";
+            const server = await bluetoothDevice.gatt.connect();
             
-            const service = await bluetoothServer.getPrimaryService(SERVICE_UUID);
-            targetCharacteristic = await service.getCharacteristic(CHARACTERISTIC_UUID);
+            status.innerText = "Buscando servicios...";
+            const services = await server.getPrimaryServices();
+            
+            // Busca la primera característica disponible que permita escritura
+            for (let service of services) {
+                const characteristics = await service.getCharacteristics();
+                for (let characteristic of characteristics) {
+                    if (characteristic.properties.write || characteristic.properties.writeWithoutResponse) {
+                        targetCharacteristic = characteristic;
+                        break;
+                    }
+                }
+                if (targetCharacteristic) break;
+            }
 
-            status.innerText = "¡Conectado directamente!";
+            if (targetCharacteristic) {
+                status.innerText = "¡Conectado y listo!";
+            } else {
+                status.innerText = "Conectado, pero no se halló canal de escritura.";
+            }
+
         } catch (error) {
             console.error(error);
             status.innerText = "Error: " + error.message;
@@ -72,17 +78,17 @@
 
     async function enviarComando(nivel) {
         if (!targetCharacteristic) {
-            alert("Primero conéctate por Bluetooth.");
+            alert("Primero conéctate al dispositivo por Bluetooth.");
             return;
         }
         try {
-            // Estructura de bytes básica para enviar la orden de velocidad al chip
-            // El formato varía según el sub-protocolo exacto del fabricante (ej: [0x0b, nivel])
+            // Estructura de bytes estándar para chips Aogu / Pretty Love
             const comando = new Uint8Array([0x0b, nivel]);
             await targetCharacteristic.writeValue(comando);
-            document.getElementById('status').innerText = "Enviado nivel: " + nivel;
+            document.getElementById('status').innerText = "Comando enviado (Nivel: " + nivel + ")";
         } catch (error) {
-            console.error("Fallo al enviar comando:", error);
+            console.error("Fallo al escribir:", error);
+            status.innerText = "Error al enviar comando.";
         }
     }
 </script>
