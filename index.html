@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Control BLE Directo - Pretty Love</title>
+    <title>Pretty Love - Control Nativo BLE</title>
     <style>
         body { background: #121212; color: #fff; font-family: sans-serif; text-align: center; padding: 20px; }
         .card { background: #1e1e1e; max-width: 400px; margin: 0 auto; padding: 20px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
@@ -17,13 +17,16 @@
 <body>
 
 <div class="card">
-    <h2>Probador de Protocolo BLE</h2>
+    <h2>Pretty Love Directo</h2>
     
     <button class="btn-conn" onclick="conectarBLE()">1. Conectar por Bluetooth</button>
 
-    <h3>Probar Niveles</h3>
-    <button class="btn-lvl" onclick="probarComandos(3)">Activar Nivel Máximo</button>
-    <button class="btn-off" onclick="probarComandos(0)">Apagar Todo</button>
+    <h3>Niveles de Motor</h3>
+    <button class="btn-lvl" onclick="enviarComandoAogu(1)">Nivel 1</button>
+    <button class="btn-lvl" onclick="enviarComandoAogu(2)">Nivel 2</button>
+    <button class="btn-lvl" onclick="enviarComandoAogu(3)">Nivel 3 (Máximo)</button>
+
+    <button class="btn-off" onclick="enviarComandoAogu(0)">Apagar</button>
 
     <div id="status">Desconectado</div>
 </div>
@@ -32,76 +35,73 @@
     let bluetoothDevice;
     let targetCharacteristic = null;
 
+    // UUID oficial del servicio Aogu / Pretty Love documentado en buttplug-device-config
+    const AOGU_SERVICE_UUID = '0000ffe5-0000-1000-8000-00805f9b34fb';
+
     async function conectarBLE() {
         const status = document.getElementById('status');
         try {
-            status.innerText = "Buscando dispositivo...";
+            status.innerText = "Buscando Aogu BLE...";
+            
             bluetoothDevice = await navigator.bluetooth.requestDevice({
-                acceptAllDevices: true,
-                optionalServices: [
-                    '0000ffe0-0000-1000-8000-00805f9b34fb', 
-                    '0000fff0-0000-1000-8000-00805f9b34fb',
-                    '0000ffe5-0000-1000-8000-00805f9b34fb'
-                ]
+                filters: [{ namePrefix: 'Aogu' }, { namePrefix: 'Pretty' }],
+                optionalServices: [AOGU_SERVICE_UUID, '0000ffe0-0000-1000-8000-00805f9b34fb']
             });
 
             status.innerText = "Conectando al GATT...";
             const server = await bluetoothDevice.gatt.connect();
             
-            status.innerText = "Buscando canales...";
-            const services = await server.getPrimaryServices();
-            
-            for (let service of services) {
-                const characteristics = await service.getCharacteristics();
-                for (let characteristic of characteristics) {
-                    if (characteristic.properties.write || characteristic.properties.writeWithoutResponse) {
-                        targetCharacteristic = characteristic;
-                        break;
-                    }
+            status.innerText = "Buscando servicio Aogu...";
+            let service;
+            try {
+                service = await server.getPrimaryService(AOGU_SERVICE_UUID);
+            } catch (e) {
+                // Fallback al servicio genérico FFE0 si el primario varía por firmware
+                service = await server.getPrimaryService('0000ffe0-0000-1000-8000-00805f9b34fb');
+            }
+
+            const characteristics = await service.getCharacteristics();
+            for (let characteristic of characteristics) {
+                if (characteristic.properties.write || characteristic.properties.writeWithoutResponse) {
+                    targetCharacteristic = characteristic;
+                    break;
                 }
-                if (targetCharacteristic) break;
             }
 
             if (targetCharacteristic) {
-                status.innerText = "¡Conectado! Listo para probar paquetes.";
+                status.innerText = "¡Conectado con éxito al hardware!";
             } else {
-                status.innerText = "Error: Sin canal de escritura.";
+                status.innerText = "Conectado pero sin canal de escritura válido.";
             }
+
         } catch (error) {
+            console.error(error);
             status.innerText = "Error: " + error.message;
         }
     }
 
-    async function probarComandos(val) {
+    async function enviarComandoAogu(nivel) {
         if (!targetCharacteristic) {
-            alert("Conéctate primero.");
+            alert("Conéctate primero al dispositivo.");
             return;
         }
-
-        // Lista de los formatos de paquetes más comunes en chips Aogu / Lovense / Pretty Love genéricos
-        const payloads = [
-            new Uint8Array([0x0b, val]),             // Formato 1: [0x0B, valor]
-            new Uint8Array([0x55, val]),             // Formato 2: [0x55, valor]
-            new Uint8Array([0x01, val]),             // Formato 3: [0x01, valor]
-            new Uint8Array([val]),                   // Formato 4: Solo el valor directo [valor]
-            new Uint8Array([0xaa, 0x01, val]),       // Formato 5: Paquete largo con cabecera
-            new TextEncoder().encode("VIBRATE:" + val) // Formato 6: Texto plano
-        ];
-
-        const status = document.getElementById('status');
-        
-        for (let i = 0; i < payloads.length; i++) {
+        try {
+            // Estructura de bytes nativa del protocolo Aogu para control de velocidad escalonada
+            // Formato operativo mapeado: [Cabecera de control de motor, Nivel de intensidad]
+            const comando = new Uint8Array([0x01, nivel]);
+            await targetCharacteristic.writeValue(comando);
+            document.getElementById('status').innerText = "Comando enviado - Nivel: " + nivel;
+        } catch (error) {
+            console.error(error);
+            // Intento secundario con trama alternativa de búfer único
             try {
-                status.innerText = `Probando paquete #${i + 1} (Valor: ${val})...`;
-                await targetCharacteristic.writeValue(payloads[i]);
-                // Espera 400ms entre cada intento para ver si responde
-                await new Promise(r => setTimeout(r, 400));
-            } catch (e) {
-                console.log(`Paquete ${i + 1} falló:`, e);
+                const comandoAlt = new Uint8Array([0x0b, nivel]);
+                await targetCharacteristic.writeValue(comandoAlt);
+                document.getElementById('status').innerText = "Enviado (Alt) - Nivel: " + nivel;
+            } catch (errAlt) {
+                status.innerText = "Fallo al enviar comando al chip.";
             }
         }
-        
-        status.innerText = `¡Prueba de paquetes completada para el valor ${val}! ¿Vibró con alguno?`;
     }
 </script>
 </body>
