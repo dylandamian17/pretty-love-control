@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Pretty Love - Control XToys</title>
+    <title>Pretty Love - Debug Console</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -11,45 +11,45 @@
             color: #ffffff;
             text-align: center;
             margin: 0;
-            padding: 20px;
+            padding: 15px;
         }
         h1 {
             color: #ff4081;
-            font-size: 22px;
+            font-size: 20px;
             margin-bottom: 5px;
         }
         .container {
             max-width: 400px;
             margin: 0 auto;
             background: #1e1e1e;
-            padding: 20px;
+            padding: 15px;
             border-radius: 12px;
             box-shadow: 0 4px 15px rgba(0,0,0,0.5);
         }
         .control-card {
             background: #2a2a2a;
-            padding: 15px;
+            padding: 12px;
             border-radius: 8px;
-            margin-bottom: 15px;
+            margin-bottom: 12px;
         }
         label {
             display: block;
-            margin-bottom: 8px;
+            margin-bottom: 6px;
             font-weight: bold;
-            font-size: 14px;
+            font-size: 13px;
         }
         input[type="range"] {
             width: 100%;
             accent-color: #ff4081;
-            margin-bottom: 10px;
+            margin-bottom: 8px;
         }
         button {
             background-color: #ff4081;
             color: white;
             border: none;
-            padding: 10px 15px;
+            padding: 10px;
             border-radius: 6px;
-            font-size: 15px;
+            font-size: 14px;
             cursor: pointer;
             width: 100%;
             transition: background 0.2s;
@@ -59,23 +59,50 @@
         }
         .btn-secondary {
             background-color: #444;
-            margin-top: 10px;
+            margin-top: 8px;
         }
         .btn-secondary:hover {
             background-color: #555;
         }
-        .status {
+        /* Consola de logs en pantalla */
+        .log-box {
+            background: #0a0a0a;
+            border: 1px solid #333;
+            border-radius: 6px;
+            padding: 8px;
             margin-top: 15px;
-            font-size: 13px;
+            height: 120px;
+            overflow-y: auto;
+            text-align: left;
+            font-family: monospace;
+            font-size: 11px;
+            color: #00ffcc;
+        }
+        .log-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 5px;
+            font-size: 12px;
             color: #aaa;
+        }
+        .clear-btn {
+            background: #333;
+            border: none;
+            color: #fff;
+            padding: 2px 6px;
+            font-size: 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            width: auto;
         }
     </style>
 </head>
 <body>
 
     <div class="container">
-        <h1>Pretty Love Control</h1>
-        <p class="status" style="margin-top:0;">Webhook ID: <strong>K3odo1pj9DcX</strong></p>
+        <h1>Pretty Love Debug</h1>
+        <p style="font-size: 12px; color: #aaa; margin-top:0;">ID: <strong>K3odo1pj9DcX</strong></p>
 
         <!-- Canal 1: Vibración -->
         <div class="control-card">
@@ -91,14 +118,31 @@
             <button onclick="sendChannel(2)">Enviar Canal 2</button>
         </div>
 
-        <!-- Botón Global de Parada -->
-        <button onclick="stopAll()" class="btn-secondary">Apagar Todo (Stop)</button>
+        <button onclick="stopAll()" class="btn-secondary">Apagar Todo</button>
         
-        <div id="responseStatus" class="status"></div>
+        <!-- Consola de Log Visual -->
+        <div style="margin-top: 15px;">
+            <div class="log-header">
+                <span>Registro de Logs:</span>
+                <button class="clear-btn" onclick="clearLogs()">Limpiar</button>
+            </div>
+            <div id="logConsole" class="log-box"></div>
+        </div>
     </div>
 
     <script>
         const webhookId = "K3odo1pj9DcX";
+
+        function logMessage(msg) {
+            const consoleDiv = document.getElementById('logConsole');
+            const time = new Date().toLocaleTimeString();
+            consoleDiv.innerHTML += `[${time}] ${msg}<br>`;
+            consoleDiv.scrollTop = consoleDiv.scrollHeight;
+        }
+
+        function clearLogs() {
+            document.getElementById('logConsole').innerHTML = "";
+        }
 
         function updateVal(channel, val) {
             document.getElementById(`label${channel}`).innerText = val;
@@ -106,19 +150,23 @@
 
         async function sendChannel(channel) {
             const val = document.getElementById(`val${channel}`).value;
-            const statusDiv = document.getElementById('responseStatus');
-            
-            // Se incluye obligatoriamente 'action=trigger' junto al id, canal e intensidad
             const url = `https://webhook.xtoys.app/?id=${webhookId}&action=trigger&channel=${channel}&intensity=${val}&value=${val}`;
-
-            statusDiv.innerText = `Enviando Canal ${channel} (${val}%)...`;
+            
+            logMessage(`Enviando C${channel} al ival: ${val}%`);
+            logMessage(`URL: ${url}`);
 
             try {
-                await fetch(url, { mode: 'no-cors' });
-                statusDiv.innerText = `¡Comando enviado (Canal ${channel}: ${val}%)!`;
-            } catch (error) {
-                console.error(error);
-                statusDiv.innerText = "Error al conectar con el webhook.";
+                // Intentamos primero con CORS normal por si XToys lo soporta ahora
+                const response = await fetch(url);
+                logMessage(`Respuesta OK. Status: ${response.status}`);
+            } catch (err) {
+                logMessage(`CORS bloqueó lectura directa (Esperado). Probando no-cors...`);
+                try {
+                    await fetch(url, { mode: 'no-cors' });
+                    logMessage(`Petición no-cors enviada con éxito.`);
+                } catch (innerErr) {
+                    logMessage(`ERROR CRÍTICO: ${innerErr.message}`);
+                }
             }
         }
 
@@ -128,19 +176,18 @@
             updateVal(1, 0);
             updateVal(2, 0);
 
-            const statusDiv = document.getElementById('responseStatus');
             const url = `https://webhook.xtoys.app/?id=${webhookId}&action=trigger&channel=all&intensity=0&value=0`;
-
-            statusDiv.innerText = "Apagando dispositivos...";
+            logMessage(`Enviando STOP general...`);
 
             try {
                 await fetch(url, { mode: 'no-cors' });
-                statusDiv.innerText = "¡Dispositivos apagados!";
-            } catch (error) {
-                console.error(error);
-                statusDiv.innerText = "Error al apagar.";
+                logMessage(`Comando STOP enviado.`);
+            } catch (err) {
+                logMessage(`ERROR STOP: ${err.message}`);
             }
         }
+
+        logMessage("Consola lista. Probá mover un slider.");
     </script>
 
 </body>
