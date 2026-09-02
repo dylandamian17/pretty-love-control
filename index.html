@@ -3,104 +3,110 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Panel BDSM - Pretty Love (Modos)</title>
+    <title>Control Pretty Love - XToys Webhook</title>
     <style>
-        body { font-family: Arial, sans-serif; background: #121212; color: #fff; text-align: center; padding: 20px; }
-        .caja { background: #1e1e1e; padding: 20px; border-radius: 10px; margin: 15px auto; max-width: 400px; }
-        button { background: #6200ea; color: white; border: none; padding: 15px; font-size: 16px; border-radius: 8px; cursor: pointer; margin: 5px; width: 45%; }
-        button:active { background: #3700b3; }
-        button:disabled { background: #555; cursor: not-allowed; }
-        .btn-grande { width: 100%; margin-top: 15px; background: #03dac6; color: #000; font-weight: bold; }
-        .btn-stop { width: 100%; margin-top: 20px; background: #cf6679; font-weight: bold; }
-        #controles { display: none; }
-        #estado { font-style: italic; color: #03dac6; margin-bottom: 20px; font-size: 14px; }
-        .grid-modos { display: flex; flex-wrap: wrap; justify-content: space-between; }
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #121212;
+            color: #ffffff;
+            text-align: center;
+            margin: 0;
+            padding: 20px;
+        }
+        h1 {
+            color: #ff4081;
+        }
+        .container {
+            max-width: 400px;
+            margin: 0 auto;
+            background: #1e1e1e;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+        }
+        .control-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: bold;
+        }
+        input[type="range"] {
+            width: 100%;
+            accent-color: #ff4081;
+        }
+        button {
+            background-color: #ff4081;
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 6px;
+            font-size: 16px;
+            cursor: pointer;
+            width: 100%;
+            margin-top: 10px;
+            transition: background 0.2s;
+        }
+        button:hover {
+            background-color: #e03570;
+        }
+        .status {
+            margin-top: 15px;
+            font-size: 14px;
+            color: #888;
+        }
     </style>
 </head>
 <body>
 
-    <h2>Selector de Ondas - Pretty Love</h2>
-    
-    <div id="estado">Iniciando motor interno (WASM)...</div>
-    <button id="btn-conectar" class="btn-grande" disabled>1. Vincular Juguete</button>
+    <div class="container">
+        <h1>Pretty Love Control</h1>
+        <p class="status">Webhook ID: <strong>K3odo1pj9DcX</strong></p>
 
-    <div id="controles">
-        <div class="caja">
-            <h3>Selecciona la Onda (1 al 10)</h3>
-            <p style="font-size:12px; color:#aaa;">Una de estas pistas activará el Shock. ¡Pruébalas!</p>
-            <div class="grid-modos">
-                <!-- Botones del 1 al 10 -->
-                <button onclick="enviarModo(1)">Modo 1</button>
-                <button onclick="enviarModo(2)">Modo 2</button>
-                <button onclick="enviarModo(3)">Modo 3</button>
-                <button onclick="enviarModo(4)">Modo 4</button>
-                <button onclick="enviarModo(5)">Modo 5</button>
-                <button onclick="enviarModo(6)">Modo 6</button>
-                <button onclick="enviarModo(7)">Modo 7</button>
-                <button onclick="enviarModo(8)">Modo 8</button>
-                <button onclick="enviarModo(9)">Modo 9</button>
-                <button onclick="enviarModo(10)">Modo 10</button>
-            </div>
-            
-            <button class="btn-stop" onclick="detener()">🛑 DETENER / APAGAR</button>
+        <div class="control-group">
+            <label for="intensityRange">Intensidad: <span id="intensityVal">0</span>%</label>
+            <input type="range" id="intensityRange" min="0" max="100" value="0" oninput="updateLabel(this.value)">
         </div>
+
+        <button onclick="sendWebhook()">Enviar Comando</button>
+        <button onclick="stopDevice()" style="background-color: #555;">Apagar / Stop</button>
+        
+        <div id="responseStatus" class="status"></div>
     </div>
 
-    <script type="module">
-        import { ButtplugClient } from "https://cdn.jsdelivr.net/npm/buttplug@3.2.1/dist/web/buttplug.mjs";
-        import { ButtplugWasmClientConnector } from "https://cdn.jsdelivr.net/npm/buttplug-wasm@2.0.1/dist/buttplug-wasm.mjs";
+    <script>
+        const webhookId = "K3odo1pj9DcX";
 
-        let cliente = null;
-        let jugueteActivo = null;
+        function updateLabel(val) {
+            document.getElementById('intensityVal').innerText = val;
+        }
 
-        async function initMotor() {
+        async function sendWebhook() {
+            const intensity = document.getElementById('intensityRange').value;
+            const statusDiv = document.getElementById('responseStatus');
+            
+            // Estructura de parámetros orientada al webhook de XToys
+            const url = `https://webhook.xtoys.app/?id=${webhookId}&v=${intensity}`;
+
+            statusDiv.innerText = "Enviando comando...";
+
             try {
-                cliente = new ButtplugClient("App BDSM");
-                const conector = new ButtplugWasmClientConnector();
-                await cliente.connect(conector);
-
-                cliente.addListener("deviceadded", async (dispositivo) => {
-                    jugueteActivo = dispositivo;
-                    document.getElementById('estado').innerText = `Conectado: ${dispositivo.Name || "Pretty Love"}`;
-                    document.getElementById('controles').style.display = "block";
-                    document.getElementById('btn-conectar').style.display = "none";
-                    await cliente.stopScanning(); 
-                });
-
-                document.getElementById('estado').innerText = "Motor listo. Presiona Vincular.";
-                document.getElementById('btn-conectar').disabled = false;
+                // Usamos no-cors por restricciones comunes de origen cruzado en navegadores móviles al disparar webhooks externos
+                await fetch(url, { mode: 'no-cors' });
+                statusDiv.innerText = `¡Comando enviado! Intensidad: ${intensity}%`;
             } catch (error) {
-                document.getElementById('estado').innerText = "Error: " + error.message;
+                console.error(error);
+                statusDiv.innerText = "Error al conectar con el webhook.";
             }
         }
 
-        document.getElementById('btn-conectar').addEventListener('click', async () => {
-            await cliente.startScanning();
-        });
-
-        // La función clave que traduce el botón al porcentaje exacto
-        window.enviarModo = async function(numeroModo) {
-            if (!jugueteActivo) return;
-            
-            // Si presionan el botón 3, envía 0.3. Si presionan el 10, envía 1.0.
-            let intensidadMatematica = numeroModo / 10.0; 
-            
-            try {
-                // Usamos el formato crudo que vimos que funcionaba en el log ("método de rescate")
-                await jugueteActivo.vibrate(intensidadMatematica);
-            } catch (error) {
-                // Ignoramos silenciosamente el error "unreachable" porque la orden física sí llega
-                console.log("Comando enviado (Ignorando WASM panic)");
-            }
-        };
-
-        window.detener = async function() {
-            if (jugueteActivo) {
-                try { await jugueteActivo.stop(); } catch(e) {}
-            }
-        };
-
-        initMotor();
+        async function stopDevice() {
+            document.getElementById('intensityRange').value = 0;
+            updateLabel(0);
+            await sendWebhook();
+        }
     </script>
+
 </body>
 </html>
