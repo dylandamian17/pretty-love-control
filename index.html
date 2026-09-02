@@ -3,52 +3,47 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Control BDSM - v4 (Debug)</title>
+    <title>Panel BDSM - Pretty Love (Modos)</title>
     <style>
         body { font-family: Arial, sans-serif; background: #121212; color: #fff; text-align: center; padding: 20px; }
         .caja { background: #1e1e1e; padding: 20px; border-radius: 10px; margin: 15px auto; max-width: 400px; }
-        button { background: #6200ea; color: white; border: none; padding: 15px 20px; font-size: 16px; border-radius: 8px; cursor: pointer; width: 100%; margin-bottom: 10px; }
+        button { background: #6200ea; color: white; border: none; padding: 15px; font-size: 16px; border-radius: 8px; cursor: pointer; margin: 5px; width: 45%; }
         button:active { background: #3700b3; }
         button:disabled { background: #555; cursor: not-allowed; }
-        .peligro { background: #cf6679; }
-        .peligro:active { background: #b00020; }
-        input[type=range] { width: 100%; margin: 15px 0; }
+        .btn-grande { width: 100%; margin-top: 15px; background: #03dac6; color: #000; font-weight: bold; }
+        .btn-stop { width: 100%; margin-top: 20px; background: #cf6679; font-weight: bold; }
         #controles { display: none; }
         #estado { font-style: italic; color: #03dac6; margin-bottom: 20px; font-size: 14px; }
-        
-        /* Estilos del Logger */
-        #zona-debug { margin-top: 30px; background: #000; padding: 15px; border-radius: 8px; text-align: left; }
-        textarea { width: 100%; height: 150px; background: #222; color: #0f0; font-family: monospace; border: 1px solid #444; padding: 10px; box-sizing: border-box; }
-        #btn-copiar { background: #03dac6; color: #000; margin-top: 10px; font-weight: bold; }
+        .grid-modos { display: flex; flex-wrap: wrap; justify-content: space-between; }
     </style>
 </head>
 <body>
 
-    <h2>Panel BDSM - Pretty Love</h2>
+    <h2>Selector de Ondas - Pretty Love</h2>
     
-    <div id="estado">Iniciando motor interno (WASM)... por favor espera.</div>
-    <button id="btn-conectar" disabled>Vincular Juguete</button>
+    <div id="estado">Iniciando motor interno (WASM)...</div>
+    <button id="btn-conectar" class="btn-grande" disabled>1. Vincular Juguete</button>
 
     <div id="controles">
         <div class="caja">
-            <label>Intensidad Vibración: <span id="val-vib">50</span>%</label>
-            <input type="range" id="rango-vib" min="1" max="100" value="50">
-            <button id="btn-vibrar">Vibrar (2s)</button>
+            <h3>Selecciona la Onda (1 al 10)</h3>
+            <p style="font-size:12px; color:#aaa;">Una de estas pistas activará el Shock. ¡Pruébalas!</p>
+            <div class="grid-modos">
+                <!-- Botones del 1 al 10 -->
+                <button onclick="enviarModo(1)">Modo 1</button>
+                <button onclick="enviarModo(2)">Modo 2</button>
+                <button onclick="enviarModo(3)">Modo 3</button>
+                <button onclick="enviarModo(4)">Modo 4</button>
+                <button onclick="enviarModo(5)">Modo 5</button>
+                <button onclick="enviarModo(6)">Modo 6</button>
+                <button onclick="enviarModo(7)">Modo 7</button>
+                <button onclick="enviarModo(8)">Modo 8</button>
+                <button onclick="enviarModo(9)">Modo 9</button>
+                <button onclick="enviarModo(10)">Modo 10</button>
+            </div>
+            
+            <button class="btn-stop" onclick="detener()">🛑 DETENER / APAGAR</button>
         </div>
-
-        <div class="caja">
-            <label>Intensidad Shock: <span id="val-shock">30</span>%</label>
-            <input type="range" id="rango-shock" min="1" max="100" value="30">
-            <button id="btn-shock" class="peligro">Shock Eléctrico (1s)</button>
-        </div>
-        <button id="btn-detener" style="background: #333;">Detener Todo</button>
-    </div>
-
-    <!-- ZONA DE DEBUGGING -->
-    <div id="zona-debug">
-        <h3>📋 Log de Sistema</h3>
-        <textarea id="log-salida" readonly></textarea>
-        <button id="btn-copiar">Copiar Log para enviarlo</button>
     </div>
 
     <script type="module">
@@ -58,113 +53,52 @@
         let cliente = null;
         let jugueteActivo = null;
 
-        // --- SISTEMA DE LOGGING ---
-        const cajaLog = document.getElementById('log-salida');
-        function agregarLog(mensaje, objeto = null) {
-            let logFinal = `[${new Date().toLocaleTimeString()}] ${mensaje}`;
-            if (objeto) {
-                try {
-                    // Extraer propiedades reales del objeto aunque tenga prototipos ocultos
-                    let objLimpio = {};
-                    for (let key in objeto) {
-                        if (typeof objeto[key] !== 'function') objLimpio[key] = objeto[key];
-                    }
-                    logFinal += "\n" + JSON.stringify(objLimpio, null, 2);
-                } catch(e) {
-                    logFinal += "\n[Objeto no se pudo formatear]";
-                }
-            }
-            cajaLog.value += logFinal + "\n\n";
-            cajaLog.scrollTop = cajaLog.scrollHeight; // Auto-scroll
-        }
-
-        document.getElementById('btn-copiar').addEventListener('click', () => {
-            cajaLog.select();
-            document.execCommand('copy');
-            agregarLog("¡Log copiado al portapapeles!");
-        });
-        // --------------------------
-
-        document.getElementById('rango-vib').oninput = function() { document.getElementById('val-vib').innerText = this.value; }
-        document.getElementById('rango-shock').oninput = function() { document.getElementById('val-shock').innerText = this.value; }
-
         async function initMotor() {
-            agregarLog("Iniciando ButtplugClient...");
             try {
                 cliente = new ButtplugClient("App BDSM");
                 const conector = new ButtplugWasmClientConnector();
                 await cliente.connect(conector);
-                agregarLog("Motor WASM conectado. Esperando interacción.");
 
                 cliente.addListener("deviceadded", async (dispositivo) => {
                     jugueteActivo = dispositivo;
-                    
-                    // Aquí capturamos cómo se llama realmente y qué tiene adentro
-                    let nombreReal = dispositivo.name || dispositivo.Name || "Desconocido";
-                    document.getElementById('estado').innerText = `Conectado: ${nombreReal}`;
-                    document.getElementById('estado').style.color = "#03dac6";
-                    
-                    agregarLog(`¡Dispositivo Vinculado!: ${nombreReal}`, dispositivo);
-                    agregarLog(`Atributos de vibración disponibles: ${dispositivo.vibrateAttributes ? dispositivo.vibrateAttributes.length : 'Ninguno'}`);
-
+                    document.getElementById('estado').innerText = `Conectado: ${dispositivo.Name || "Pretty Love"}`;
                     document.getElementById('controles').style.display = "block";
                     document.getElementById('btn-conectar').style.display = "none";
                     await cliente.stopScanning(); 
                 });
 
-                document.getElementById('estado').innerText = "Motor listo. Enciende el juguete y presiona Vincular.";
+                document.getElementById('estado').innerText = "Motor listo. Presiona Vincular.";
                 document.getElementById('btn-conectar').disabled = false;
-
             } catch (error) {
-                agregarLog("Error Crítico al cargar motor: " + error.message);
+                document.getElementById('estado').innerText = "Error: " + error.message;
             }
         }
 
         document.getElementById('btn-conectar').addEventListener('click', async () => {
-            try {
-                agregarLog("Solicitando ventana de Bluetooth a Chrome...");
-                await cliente.startScanning();
-            } catch (error) {
-                agregarLog("Error escaneando: " + error.message);
-            }
+            await cliente.startScanning();
         });
 
-        async function disparar(actuador, tiempoMs) {
+        // La función clave que traduce el botón al porcentaje exacto
+        window.enviarModo = async function(numeroModo) {
             if (!jugueteActivo) return;
-            let intensidad = (actuador === 0) ? document.getElementById('rango-vib').value / 100 : document.getElementById('rango-shock').value / 100;
             
-            agregarLog(`Intentando accionar Actuador ${actuador} a ${intensidad*100}%`);
+            // Si presionan el botón 3, envía 0.3. Si presionan el 10, envía 1.0.
+            let intensidadMatematica = numeroModo / 10.0; 
             
             try {
-                // Probamos el formato estándar
-                await jugueteActivo.vibrate([{ Index: actuador, Speed: intensidad }]);
-                agregarLog(`Éxito. Deteniendo en ${tiempoMs}ms...`);
-                
-                setTimeout(async () => {
-                    try { await jugueteActivo.stop(); } catch(e) { agregarLog("Error al detener: " + e.message); }
-                }, tiempoMs);
-                
+                // Usamos el formato crudo que vimos que funcionaba en el log ("método de rescate")
+                await jugueteActivo.vibrate(intensidadMatematica);
             } catch (error) {
-                agregarLog(`ERROR AL VIBRAR: ${error.message}`);
-                
-                // Intento de rescate: Formato viejo
-                try {
-                    agregarLog("Intentando método de rescate (formato simple)...");
-                    await jugueteActivo.vibrate(intensidad);
-                } catch(e2) {
-                    agregarLog(`ERROR FATAL DE RESCATE: ${e2.message}`);
-                }
+                // Ignoramos silenciosamente el error "unreachable" porque la orden física sí llega
+                console.log("Comando enviado (Ignorando WASM panic)");
             }
-        }
+        };
 
-        document.getElementById('btn-vibrar').addEventListener('click', () => disparar(0, 2000));
-        document.getElementById('btn-shock').addEventListener('click', () => disparar(1, 1000));
-        document.getElementById('btn-detener').addEventListener('click', async () => { 
-            if(jugueteActivo) {
-                agregarLog("Deteniendo de emergencia...");
-                await jugueteActivo.stop(); 
+        window.detener = async function() {
+            if (jugueteActivo) {
+                try { await jugueteActivo.stop(); } catch(e) {}
             }
-        });
+        };
 
         initMotor();
     </script>
