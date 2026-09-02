@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Control Pretty Love - XToys Webhook</title>
+    <title>Pretty Love - Control Independiente</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -15,6 +15,8 @@
         }
         h1 {
             color: #ff4081;
+            font-size: 22px;
+            margin-bottom: 5px;
         }
         .container {
             max-width: 400px;
@@ -24,37 +26,48 @@
             border-radius: 12px;
             box-shadow: 0 4px 15px rgba(0,0,0,0.5);
         }
-        .control-group {
-            margin-bottom: 20px;
+        .control-card {
+            background: #2a2a2a;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 15px;
         }
         label {
             display: block;
             margin-bottom: 8px;
             font-weight: bold;
+            font-size: 14px;
         }
         input[type="range"] {
             width: 100%;
             accent-color: #ff4081;
+            margin-bottom: 10px;
         }
         button {
             background-color: #ff4081;
             color: white;
             border: none;
-            padding: 12px 20px;
+            padding: 10px 15px;
             border-radius: 6px;
-            font-size: 16px;
+            font-size: 15px;
             cursor: pointer;
             width: 100%;
-            margin-top: 10px;
             transition: background 0.2s;
         }
         button:hover {
             background-color: #e03570;
         }
+        .btn-secondary {
+            background-color: #444;
+            margin-top: 10px;
+        }
+        .btn-secondary:hover {
+            background-color: #555;
+        }
         .status {
             margin-top: 15px;
-            font-size: 14px;
-            color: #888;
+            font-size: 13px;
+            color: #aaa;
         }
     </style>
 </head>
@@ -62,15 +75,24 @@
 
     <div class="container">
         <h1>Pretty Love Control</h1>
-        <p class="status">Webhook ID: <strong>K3odo1pj9DcX</strong></p>
+        <p class="status" style="margin-top:0;">Webhook ID: <strong>K3odo1pj9DcX</strong></p>
 
-        <div class="control-group">
-            <label for="intensityRange">Intensidad: <span id="intensityVal">0</span>%</label>
-            <input type="range" id="intensityRange" min="0" max="100" value="0" oninput="updateLabel(this.value)">
+        <!-- Canal 1: Vibración -->
+        <div class="control-card">
+            <label for="val1">Canal 1 (Vib.): <span id="label1">0</span>%</label>
+            <input type="range" id="val1" min="0" max="100" value="0" oninput="updateVal(1, this.value)">
+            <button onclick="sendChannel(1)">Enviar Canal 1</button>
         </div>
 
-        <button onclick="sendWebhook()">Enviar Comando</button>
-        <button onclick="stopDevice()" style="background-color: #555;">Apagar / Stop</button>
+        <!-- Canal 2: E-S -->
+        <div class="control-card">
+            <label for="val2">Canal 2 (E-S): <span id="label2">0</span>%</label>
+            <input type="range" id="val2" min="0" max="100" value="0" oninput="updateVal(2, this.value)">
+            <button onclick="sendChannel(2)">Enviar Canal 2</button>
+        </div>
+
+        <!-- Botón Global de Parada -->
+        <button onclick="stopAll()" class="btn-secondary">Apagar Todo (Stop)</button>
         
         <div id="responseStatus" class="status"></div>
     </div>
@@ -78,33 +100,46 @@
     <script>
         const webhookId = "K3odo1pj9DcX";
 
-        function updateLabel(val) {
-            document.getElementById('intensityVal').innerText = val;
+        function updateVal(channel, val) {
+            document.getElementById(`label${channel}`).innerText = val;
         }
 
-        async function sendWebhook() {
-            const intensity = document.getElementById('intensityRange').value;
+        async function sendChannel(channel) {
+            const val = document.getElementById(`val${channel}`).value;
             const statusDiv = document.getElementById('responseStatus');
             
-            // Estructura de parámetros orientada al webhook de XToys
-            const url = `https://webhook.xtoys.app/?id=${webhookId}&v=${intensity}`;
+            // Envía parámetros compatibles (v1/v2, channel y value) para cubrir la lectura del script en XToys
+            const url = `https://webhook.xtoys.app/?id=${webhookId}&v${channel}=${val}&channel=${channel}&value=${val}`;
 
-            statusDiv.innerText = "Enviando comando...";
+            statusDiv.innerText = `Enviando Canal ${channel} (${val}%)...`;
 
             try {
-                // Usamos no-cors por restricciones comunes de origen cruzado en navegadores móviles al disparar webhooks externos
                 await fetch(url, { mode: 'no-cors' });
-                statusDiv.innerText = `¡Comando enviado! Intensidad: ${intensity}%`;
+                statusDiv.innerText = `¡Canal ${channel} enviado (${val}%)!`;
             } catch (error) {
                 console.error(error);
                 statusDiv.innerText = "Error al conectar con el webhook.";
             }
         }
 
-        async function stopDevice() {
-            document.getElementById('intensityRange').value = 0;
-            updateLabel(0);
-            await sendWebhook();
+        async function stopAll() {
+            document.getElementById('val1').value = 0;
+            document.getElementById('val2').value = 0;
+            updateVal(1, 0);
+            updateVal(2, 0);
+
+            const statusDiv = document.getElementById('responseStatus');
+            const url = `https://webhook.xtoys.app/?id=${webhookId}&v1=0&v2=0&value=0`;
+
+            statusDiv.innerText = "Apagando dispositivos...";
+
+            try {
+                await fetch(url, { mode: 'no-cors' });
+                statusDiv.innerText = "¡Dispositivos apagados!";
+            } catch (error) {
+                console.error(error);
+                statusDiv.innerText = "Error al apagar.";
+            }
         }
     </script>
 
