@@ -17,16 +17,13 @@
 <body>
 
 <div class="card">
-    <h2>Control BLE Directo</h2>
+    <h2>Probador de Protocolo BLE</h2>
     
     <button class="btn-conn" onclick="conectarBLE()">1. Conectar por Bluetooth</button>
 
-    <h3>Niveles</h3>
-    <button class="btn-lvl" onclick="enviarComando(0x01)">Nivel 1</button>
-    <button class="btn-lvl" onclick="enviarComando(0x02)">Nivel 2</button>
-    <button class="btn-lvl" onclick="enviarComando(0x03)">Nivel 3 (Máximo)</button>
-
-    <button class="btn-off" onclick="enviarComando(0x00)">Apagar</button>
+    <h3>Probar Niveles</h3>
+    <button class="btn-lvl" onclick="probarComandos(3)">Activar Nivel Máximo</button>
+    <button class="btn-off" onclick="probarComandos(0)">Apagar Todo</button>
 
     <div id="status">Desconectado</div>
 </div>
@@ -38,14 +35,12 @@
     async function conectarBLE() {
         const status = document.getElementById('status');
         try {
-            status.innerText = "Buscando dispositivos...";
-            
+            status.innerText = "Buscando dispositivo...";
             bluetoothDevice = await navigator.bluetooth.requestDevice({
                 acceptAllDevices: true,
                 optionalServices: [
                     '0000ffe0-0000-1000-8000-00805f9b34fb', 
                     '0000fff0-0000-1000-8000-00805f9b34fb',
-                    '0000180a-0000-1000-8000-00805f9b34fb',
                     '0000ffe5-0000-1000-8000-00805f9b34fb'
                 ]
             });
@@ -53,13 +48,12 @@
             status.innerText = "Conectando al GATT...";
             const server = await bluetoothDevice.gatt.connect();
             
-            status.innerText = "Escaneando servicios y características...";
+            status.innerText = "Buscando canales...";
             const services = await server.getPrimaryServices();
             
             for (let service of services) {
                 const characteristics = await service.getCharacteristics();
                 for (let characteristic of characteristics) {
-                    // Buscamos cualquier canal que soporte escritura (write o writeWithoutResponse)
                     if (characteristic.properties.write || characteristic.properties.writeWithoutResponse) {
                         targetCharacteristic = characteristic;
                         break;
@@ -69,38 +63,45 @@
             }
 
             if (targetCharacteristic) {
-                status.innerText = "¡Canal de escritura hallado! Listo.";
+                status.innerText = "¡Conectado! Listo para probar paquetes.";
             } else {
-                status.innerText = "Error: El dispositivo no expone canales de escritura.";
+                status.innerText = "Error: Sin canal de escritura.";
             }
-
         } catch (error) {
-            console.error(error);
             status.innerText = "Error: " + error.message;
         }
     }
 
-    async function enviarComando(nivel) {
+    async function probarComandos(val) {
         if (!targetCharacteristic) {
-            alert("Primero conéctate al dispositivo.");
+            alert("Conéctate primero.");
             return;
         }
-        try {
-            // Paquete de bytes estándar de control para Aogu / Pretty Love
-            const comando = new Uint8Array([0x0b, nivel]);
-            await targetCharacteristic.writeValue(comando);
-            document.getElementById('status').innerText = "Comando enviado. Nivel: " + nivel;
-        } catch (error) {
-            console.error(error);
-            // Si el comando estándar falla, intentamos un paquete alternativo de longitud mínima
+
+        // Lista de los formatos de paquetes más comunes en chips Aogu / Lovense / Pretty Love genéricos
+        const payloads = [
+            new Uint8Array([0x0b, val]),             // Formato 1: [0x0B, valor]
+            new Uint8Array([0x55, val]),             // Formato 2: [0x55, valor]
+            new Uint8Array([0x01, val]),             // Formato 3: [0x01, valor]
+            new Uint8Array([val]),                   // Formato 4: Solo el valor directo [valor]
+            new Uint8Array([0xaa, 0x01, val]),       // Formato 5: Paquete largo con cabecera
+            new TextEncoder().encode("VIBRATE:" + val) // Formato 6: Texto plano
+        ];
+
+        const status = document.getElementById('status');
+        
+        for (let i = 0; i < payloads.length; i++) {
             try {
-                const comandoAlt = new Uint8Array([nivel]);
-                await targetCharacteristic.writeValue(comandoAlt);
-                document.getElementById('status').innerText = "Enviado (Alt). Nivel: " + nivel;
-            } catch (errAlt) {
-                status.innerText = "Error al escribir en el canal.";
+                status.innerText = `Probando paquete #${i + 1} (Valor: ${val})...`;
+                await targetCharacteristic.writeValue(payloads[i]);
+                // Espera 400ms entre cada intento para ver si responde
+                await new Promise(r => setTimeout(r, 400));
+            } catch (e) {
+                console.log(`Paquete ${i + 1} falló:`, e);
             }
         }
+        
+        status.innerText = `¡Prueba de paquetes completada para el valor ${val}! ¿Vibró con alguno?`;
     }
 </script>
 </body>
