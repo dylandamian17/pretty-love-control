@@ -11,7 +11,7 @@
         .btn-conn { background: #03dac6; color: #000; }
         .btn-lvl { background: #3700b3; color: #fff; }
         .btn-off { background: #cf6679; color: #000; margin-top: 15px; }
-        #status { margin-top: 15px; font-weight: bold; color: #bb86fc; font-size: 14px; word-break: break-all; }
+        #status { margin-top: 15px; font-weight: bold; color: #bb86fc; font-size: 13px; word-break: break-all; }
     </style>
 </head>
 <body>
@@ -40,43 +40,38 @@
         try {
             status.innerText = "Buscando dispositivos...";
             
-            // Declaramos los UUIDs universales que utilizan los chips Aogu / Pretty Love en opcionales
             bluetoothDevice = await navigator.bluetooth.requestDevice({
                 acceptAllDevices: true,
                 optionalServices: [
                     '0000ffe0-0000-1000-8000-00805f9b34fb', 
                     '0000fff0-0000-1000-8000-00805f9b34fb',
-                    '0000180a-0000-1000-8000-00805f9b34fb'
+                    '0000180a-0000-1000-8000-00805f9b34fb',
+                    '0000ffe5-0000-1000-8000-00805f9b34fb'
                 ]
             });
 
             status.innerText = "Conectando al GATT...";
             const server = await bluetoothDevice.gatt.connect();
             
-            status.innerText = "Obteniendo servicios del juguete...";
+            status.innerText = "Escaneando servicios y características...";
+            const services = await server.getPrimaryServices();
             
-            // Intentamos obtener el servicio principal de Aogu directamente
-            let service;
-            try {
-                service = await server.getPrimaryService('0000ffe0-0000-1000-8000-00805f9b34fb');
-            } catch (e) {
-                // Si falla, tomamos el primer servicio disponible que reporte el dispositivo
-                const services = await server.getPrimaryServices();
-                service = services[0];
-            }
-
-            const characteristics = await service.getCharacteristics();
-            for (let characteristic of characteristics) {
-                if (characteristic.properties.write || characteristic.properties.writeWithoutResponse) {
-                    targetCharacteristic = characteristic;
-                    break;
+            for (let service of services) {
+                const characteristics = await service.getCharacteristics();
+                for (let characteristic of characteristics) {
+                    // Buscamos cualquier canal que soporte escritura (write o writeWithoutResponse)
+                    if (characteristic.properties.write || characteristic.properties.writeWithoutResponse) {
+                        targetCharacteristic = characteristic;
+                        break;
+                    }
                 }
+                if (targetCharacteristic) break;
             }
 
             if (targetCharacteristic) {
-                status.innerText = "¡Conectado y listo!";
+                status.innerText = "¡Canal de escritura hallado! Listo.";
             } else {
-                status.innerText = "Conectado, pero canal de escritura no disponible.";
+                status.innerText = "Error: El dispositivo no expone canales de escritura.";
             }
 
         } catch (error) {
@@ -91,12 +86,20 @@
             return;
         }
         try {
+            // Paquete de bytes estándar de control para Aogu / Pretty Love
             const comando = new Uint8Array([0x0b, nivel]);
             await targetCharacteristic.writeValue(comando);
-            document.getElementById('status').innerText = "Enviado nivel: " + nivel;
+            document.getElementById('status').innerText = "Comando enviado. Nivel: " + nivel;
         } catch (error) {
             console.error(error);
-            status.innerText = "Error al enviar comando.";
+            // Si el comando estándar falla, intentamos un paquete alternativo de longitud mínima
+            try {
+                const comandoAlt = new Uint8Array([nivel]);
+                await targetCharacteristic.writeValue(comandoAlt);
+                document.getElementById('status').innerText = "Enviado (Alt). Nivel: " + nivel;
+            } catch (errAlt) {
+                status.innerText = "Error al escribir en el canal.";
+            }
         }
     }
 </script>
