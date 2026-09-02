@@ -3,27 +3,27 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Control BDSM - v2</title>
+    <title>Control BDSM - v3 (WASM)</title>
     <style>
         body { font-family: Arial, sans-serif; background: #121212; color: #fff; text-align: center; padding: 20px; }
         .caja { background: #1e1e1e; padding: 20px; border-radius: 10px; margin: 15px auto; max-width: 400px; }
         button { background: #6200ea; color: white; border: none; padding: 15px 20px; font-size: 16px; border-radius: 8px; cursor: pointer; width: 100%; margin-bottom: 10px; }
         button:active { background: #3700b3; }
+        button:disabled { background: #555; cursor: not-allowed; }
         .peligro { background: #cf6679; }
         .peligro:active { background: #b00020; }
         .ruleta { background: #ff9800; color: #000; font-weight: bold; }
         input[type=range] { width: 100%; margin: 15px 0; }
         #controles { display: none; }
-        #estado { font-style: italic; color: #03dac6; margin-bottom: 20px; }
+        #estado { font-style: italic; color: #03dac6; margin-bottom: 20px; font-size: 14px; }
     </style>
-    <script src="https://cdn.jsdelivr.net/npm/buttplug@3.0.0/dist/web/buttplug.min.js"></script>
 </head>
 <body>
 
     <h2>Panel BDSM - Pretty Love</h2>
     
-    <div id="estado">Esperando conexión...</div>
-    <button id="btn-conectar">Vincular Juguete</button>
+    <div id="estado">Iniciando motor interno (WASM)... por favor espera.</div>
+    <button id="btn-conectar" disabled>Vincular Juguete</button>
 
     <div id="controles">
         <!-- Control de Vibración -->
@@ -49,71 +49,109 @@
         <button id="btn-detener" style="background: #333;">Detener Todo</button>
     </div>
 
-    <script>
+    <!-- ATENCIÓN: Ahora usamos "module" para importar las librerías modernas -->
+    <script type="module">
+        import { ButtplugClient } from "https://cdn.jsdelivr.net/npm/buttplug@3.2.1/dist/web/buttplug.mjs";
+        import { ButtplugWasmClientConnector } from "https://cdn.jsdelivr.net/npm/buttplug-wasm@2.0.1/dist/buttplug-wasm.mjs";
+
+        let cliente = null;
         let jugueteActivo = null;
 
-        // Actualizar los números de los sliders en pantalla
+        // Actualizar los números de intensidad en la pantalla
         document.getElementById('rango-vib').oninput = function() { document.getElementById('val-vib').innerText = this.value; }
         document.getElementById('rango-shock').oninput = function() { document.getElementById('val-shock').innerText = this.value; }
 
-        document.getElementById('btn-conectar').addEventListener('click', async () => {
-            const cliente = new Buttplug.ButtplugClient("Mi App");
-            const conector = new Buttplug.ButtplugEmbeddedClientConnector();
-            
+        // 1. Inicializar el cliente al cargar la página (Descarga el motor WASM de fondo)
+        async function initMotor() {
             try {
-                document.getElementById('estado').innerText = "Buscando...";
-                await cliente.connect(conector);
+                cliente = new ButtplugClient("Mi App BDSM");
                 
+                // Usamos el conector WASM que soporta WebBluetooth directo sin intermediarios
+                const conector = new ButtplugWasmClientConnector();
+                await cliente.connect(conector);
+
+                // Configuramos qué hacer cuando encuentre un juguete
                 cliente.addListener("deviceadded", async (dispositivo) => {
                     jugueteActivo = dispositivo;
                     document.getElementById('estado').innerText = `Conectado: ${dispositivo.Name}`;
+                    document.getElementById('estado').style.color = "#03dac6";
                     document.getElementById('controles').style.display = "block";
                     document.getElementById('btn-conectar').style.display = "none";
-                    await cliente.stopScanning();
+                    
+                    await cliente.stopScanning(); // Detenemos la búsqueda por batería
+                });
+                
+                // Qué hacer si se desconecta
+                cliente.addListener("deviceremoved", () => {
+                    jugueteActivo = null;
+                    document.getElementById('estado').innerText = "Dispositivo desconectado.";
+                    document.getElementById('estado').style.color = "#cf6679";
+                    document.getElementById('controles').style.display = "none";
+                    document.getElementById('btn-conectar').style.display = "block";
                 });
 
+                // Habilitamos el botón ahora que el motor está listo
+                document.getElementById('estado').innerText = "Motor listo. Enciende el juguete y presiona Vincular.";
+                document.getElementById('estado').style.color = "#fff";
+                document.getElementById('btn-conectar').disabled = false;
+
+            } catch (error) {
+                document.getElementById('estado').innerText = "Error al cargar motor: " + error.message;
+                document.getElementById('estado').style.color = "#cf6679";
+            }
+        }
+
+        // 2. Disparar la ventana nativa de Chrome al presionar el botón
+        document.getElementById('btn-conectar').addEventListener('click', async () => {
+            try {
+                document.getElementById('estado').innerText = "Buscando... (Revisa la ventana emergente de Chrome)";
                 await cliente.startScanning();
             } catch (error) {
-                document.getElementById('estado').innerText = "Error: " + error.message;
+                document.getElementById('estado').innerText = "Error escaneando: " + error.message;
             }
         });
 
-        // Función auxiliar para enviar comandos leyendo los sliders
+        // 3. Funciones de disparo (Vibración o Shock)
         async function disparar(actuador, tiempoMs) {
             if (!jugueteActivo) return;
-            // Lee el valor del slider (0 a 100) y lo convierte a formato Buttplug (0.0 a 1.0)
+            // Convertimos el rango de 1-100 a formato Buttplug 0.0 - 1.0
             let intensidad = (actuador === 0) ? document.getElementById('rango-vib').value / 100 : document.getElementById('rango-shock').value / 100;
             
-            await jugueteActivo.vibrate([{ Index: actuador, Speed: intensidad }]);
-            setTimeout(() => jugueteActivo.stop(), tiempoMs);
+            try {
+                await jugueteActivo.vibrate([{ Index: actuador, Speed: intensidad }]);
+                setTimeout(() => jugueteActivo.stop(), tiempoMs);
+            } catch (e) {
+                console.error("Error al enviar comando:", e);
+            }
         }
 
-        // Eventos de los botones manuales
+        // 4. Asignar los clics a los botones manuales
         document.getElementById('btn-vibrar').addEventListener('click', () => disparar(0, 2000));
         document.getElementById('btn-shock').addEventListener('click', () => disparar(1, 1000));
         document.getElementById('btn-detener').addEventListener('click', async () => { if(jugueteActivo) await jugueteActivo.stop(); });
 
-        // Lógica de la Ruleta Rusa
+        // 5. La Ruleta Rusa
         document.getElementById('btn-ruleta').addEventListener('click', () => {
             const mensaje = document.getElementById('msg-ruleta');
             mensaje.innerText = "Girando...";
+            mensaje.style.color = "#aaa";
             
             setTimeout(() => {
-                let probabilidad = Math.random(); // Número entre 0 y 1
-                
+                let probabilidad = Math.random();
                 if (probabilidad < 0.30) { 
-                    // 30% de probabilidad: CASTIGO (Shock)
                     mensaje.innerText = "¡ZAP! Castigo eléctrico.";
                     mensaje.style.color = "#cf6679";
                     disparar(1, 1500); 
                 } else {
-                    // 70% de probabilidad: PREMIO (Vibración)
                     mensaje.innerText = "Te salvaste. Vibración suave.";
                     mensaje.style.color = "#03dac6";
                     disparar(0, 3000);
                 }
-            }, 1000); // 1 segundo de suspenso
+            }, 1000);
         });
+
+        // Arrancamos todo apenas carga el código
+        initMotor();
     </script>
 </body>
 </html>
