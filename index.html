@@ -40,22 +40,22 @@
         try {
             status.innerText = "Buscando dispositivos...";
             
-            // acceptAllDevices: true permite mostrar cualquier dispositivo cercano sin filtros rígidos de UUID
+            // Abrimos completamente la selección sin requerir nombres o UUIDs estrictos previos
             bluetoothDevice = await navigator.bluetooth.requestDevice({
                 acceptAllDevices: true,
-                optionalServices: ['0000ffe0-0000-1000-8000-00805f9b34fb', '0000fff0-0000-1000-8000-00805f9b34fb', 'e7100001-2503-479fb888-f7b742fa7f16']
+                optionalServices: ['0000ffe0-0000-1000-8000-00805f9b34fb', '0000fff0-0000-1000-8000-00805f9b34fb']
             });
 
-            status.innerText = "Conectando al GATT de " + bluetoothDevice.name + "...";
+            status.innerText = "Conectando al GATT de " + (bluetoothDevice.name || "Dispositivo") + "...";
             const server = await bluetoothDevice.gatt.connect();
             
-            status.innerText = "Buscando servicios...";
+            status.innerText = "Buscando servicios y canales...";
             const services = await server.getPrimaryServices();
             
-            // Busca la primera característica disponible que permita escritura
             for (let service of services) {
                 const characteristics = await service.getCharacteristics();
                 for (let characteristic of characteristics) {
+                    // Buscamos cualquier característica que permita escritura de comandos
                     if (characteristic.properties.write || characteristic.properties.writeWithoutResponse) {
                         targetCharacteristic = characteristic;
                         break;
@@ -65,9 +65,9 @@
             }
 
             if (targetCharacteristic) {
-                status.innerText = "¡Conectado y listo!";
+                status.innerText = "¡Conectado y listo para enviar comandos!";
             } else {
-                status.innerText = "Conectado, pero no se halló canal de escritura.";
+                status.innerText = "Conectado, pero no se halló un canal de escritura válido.";
             }
 
         } catch (error) {
