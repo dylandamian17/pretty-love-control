@@ -40,34 +40,43 @@
         try {
             status.innerText = "Buscando dispositivos...";
             
-            // Abrimos completamente la selección sin requerir nombres o UUIDs estrictos previos
+            // Declaramos los UUIDs universales que utilizan los chips Aogu / Pretty Love en opcionales
             bluetoothDevice = await navigator.bluetooth.requestDevice({
                 acceptAllDevices: true,
-                optionalServices: ['0000ffe0-0000-1000-8000-00805f9b34fb', '0000fff0-0000-1000-8000-00805f9b34fb']
+                optionalServices: [
+                    '0000ffe0-0000-1000-8000-00805f9b34fb', 
+                    '0000fff0-0000-1000-8000-00805f9b34fb',
+                    '0000180a-0000-1000-8000-00805f9b34fb'
+                ]
             });
 
-            status.innerText = "Conectando al GATT de " + (bluetoothDevice.name || "Dispositivo") + "...";
+            status.innerText = "Conectando al GATT...";
             const server = await bluetoothDevice.gatt.connect();
             
-            status.innerText = "Buscando servicios y canales...";
-            const services = await server.getPrimaryServices();
+            status.innerText = "Obteniendo servicios del juguete...";
             
-            for (let service of services) {
-                const characteristics = await service.getCharacteristics();
-                for (let characteristic of characteristics) {
-                    // Buscamos cualquier característica que permita escritura de comandos
-                    if (characteristic.properties.write || characteristic.properties.writeWithoutResponse) {
-                        targetCharacteristic = characteristic;
-                        break;
-                    }
+            // Intentamos obtener el servicio principal de Aogu directamente
+            let service;
+            try {
+                service = await server.getPrimaryService('0000ffe0-0000-1000-8000-00805f9b34fb');
+            } catch (e) {
+                // Si falla, tomamos el primer servicio disponible que reporte el dispositivo
+                const services = await server.getPrimaryServices();
+                service = services[0];
+            }
+
+            const characteristics = await service.getCharacteristics();
+            for (let characteristic of characteristics) {
+                if (characteristic.properties.write || characteristic.properties.writeWithoutResponse) {
+                    targetCharacteristic = characteristic;
+                    break;
                 }
-                if (targetCharacteristic) break;
             }
 
             if (targetCharacteristic) {
-                status.innerText = "¡Conectado y listo para enviar comandos!";
+                status.innerText = "¡Conectado y listo!";
             } else {
-                status.innerText = "Conectado, pero no se halló un canal de escritura válido.";
+                status.innerText = "Conectado, pero canal de escritura no disponible.";
             }
 
         } catch (error) {
@@ -78,16 +87,15 @@
 
     async function enviarComando(nivel) {
         if (!targetCharacteristic) {
-            alert("Primero conéctate al dispositivo por Bluetooth.");
+            alert("Primero conéctate al dispositivo.");
             return;
         }
         try {
-            // Estructura de bytes estándar para chips Aogu / Pretty Love
             const comando = new Uint8Array([0x0b, nivel]);
             await targetCharacteristic.writeValue(comando);
-            document.getElementById('status').innerText = "Comando enviado (Nivel: " + nivel + ")";
+            document.getElementById('status').innerText = "Enviado nivel: " + nivel;
         } catch (error) {
-            console.error("Fallo al escribir:", error);
+            console.error(error);
             status.innerText = "Error al enviar comando.";
         }
     }
